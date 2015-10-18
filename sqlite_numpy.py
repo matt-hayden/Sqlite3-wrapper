@@ -1,4 +1,6 @@
-
+#!/usr/bin/env python3
+"""Simple wrapper between Sqlite and numpy data types
+"""
 import numpy as np
 
 import wrapper
@@ -21,7 +23,6 @@ def get_dtype(table_desc):
 	titles = [ get_title(n) for n in names ]
 	return np.format_parser(names=names, formats=formats, titles=titles)
 def lookup_numpy_format(sqlite_format, sqlite_width=None):
-	print(sqlite_format)
 	if ')' in sqlite_format:
 		i = sqlite_format.index('(')
 		f = sqlite_format[:i]
@@ -39,22 +40,3 @@ def lookup_numpy_format(sqlite_format, sqlite_width=None):
 	else:
 		raise ValueError("{}({}) not found".format(sqlite_format, sqlite_width))
 #
-if __name__ == '__main__':
-	from pprint import pprint
-	import sys
-
-	from wrapper import SqliteWrapper
-
-	sw = SqliteWrapper('test.sqlite')
-	iq = 'insert into some_table ( some_text, some_int, some_real, some_numeric) values (?,?,?,?);'
-	with sw.ccursor() as cur:
-		for x in range(-20, 0):
-			cur.execute(iq, [10**x]*4)
-		for n in range(16,62):
-			cur.execute(iq, [1<<n]*4)
-		#table = cur.execute('select * from some_table;').fetchall()
-		#my_dtype = get_dtype(sw.get_table_info('some_table'))
-		ntable = np.fromiter(cur.execute('select * from some_table;'), get_dtype(sw.get_table_info('some_table')) )
-	print("sw.con.commit() to save changes")
-
-
