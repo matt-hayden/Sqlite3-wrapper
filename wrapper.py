@@ -3,6 +3,8 @@ import collections
 import contextlib
 import sqlite3 as sqlite
 
+from internals import register_aggregates
+
 
 class SqliteWrapper(contextlib.ContextDecorator):
 	def __init__(self, arg=':memory:', commit_on_exit=None, **kwargs):
@@ -10,6 +12,7 @@ class SqliteWrapper(contextlib.ContextDecorator):
 			self.con = arg
 		elif isinstance(arg, str):
 			self.con = sqlite.connect(arg, **kwargs)
+		register_aggregates(self.con)
 		self.commit_on_exit = commit_on_exit or False
 	def __enter__(self):
 		assert self.con

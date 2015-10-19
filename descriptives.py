@@ -13,19 +13,26 @@ class DescriptivesBase:
 	def count(self):
 		if self.freq:
 			return sum(c for _, c in self.freq.items())
+	def rel_freq(self):
+		if self.freq:
+			freqs = sorted(self.freq.items())
+			n = sum(c for _, c in freqs)
+			for v, c in freqs:
+				yield v, float(c)/n
 class ParametricBase(DescriptivesBase):
 	@property
 	def mean(self):
-		_, m, _ = self.get_n_mean_var()
+		_, m, _ = self.get_parametrics()
 		return m
 	@property
 	def var(self): # sample variance
-		_, _, v = self.get_n_mean_var()
+		_, _, v = self.get_parametrics()
 		return v
 	@property
 	def stdev(self):
-		return math.sqrt(self.var)
-	def get_n_mean_var(self, sample=False):
+		v = self.var
+		return math.sqrt(v) if v else None
+	def _get_parametric_sums(self):
 		if self.freq:
 			n, ts, ss = 0, 0., 0.
 			for v, c in self.freq.items():
@@ -33,16 +40,20 @@ class ParametricBase(DescriptivesBase):
 				s = v*c
 				ts += s
 				ss += v*s
-			if n <= 1:
-				var = None
-			elif sample:
-				var = (ss - ts**2/n)/(n-1)
-			else: # population
-				var = (ss - ts**2/n)/n
-			# var can be lower than 0 due to machine precision
-			return n, ts/n, var if 0 < var else 0
+		return n, ts, ss
+	def get_parametrics(self, parametric_sums=None, sample=True):
+		if parametric_sums: # special parameter for accelerated mean and variance
+			n, my_sum, my_sum2 = parametric_sums
 		else:
-			return None, None, None
+			n, my_sum, my_sum2 = self._get_parametric_sums()
+		if n <= 1:
+			var = None
+		elif sample:
+			var = (my_sum2 - my_sum**2/n)/(n-1)
+		else: # population
+			var = (my_sum2 - my_sum**2/n)/n
+		# var can be lower than 0 due to machine precision
+		return n, my_sum/n, var if 0 < var else 0
 class NonParametricBase(DescriptivesBase):
 	@property
 	def min(self):
@@ -71,12 +82,6 @@ class NonParametricBase(DescriptivesBase):
 			return min, max, max-min
 		else:
 			return None, None, None
-	def rel_freq(self):
-		if self.freq:
-			freqs = sorted(self.freq.items())
-			n = sum(c for _, c in freqs)
-			for v, c in freqs:
-				yield v, float(c)/n
 	def get_fns(self):
 		rel_freq = list(self.rel_freq())
 		if rel_freq:
@@ -127,12 +132,16 @@ import json
 class Descriptives(ParametricBase, NonParametricBase):
 	def get_descriptives(self):
 		d = {}
-		d['min'], d['first_quartile'], d['median'], d['third_quartile'], d['max'] = self.get_fns()
-		n, d['mean'], var = self.get_n_mean_var()
-		d['n'] = n
-		d['var'] = var
-		stdev = d['stdev'] = math.sqrt(var)
-		d['stderr'] = stdev/math.sqrt(n-1) if 1 < n else None
+		ps = self._get_parametric_sums()
+		n, d['sum'], d['sum_of_squares'] = ps
+		if n:
+			d['min'], d['first_quartile'], d['median'], d['third_quartile'], d['max'] = self.get_fns()
+			d['n'], d['mean'], v = self.get_parametrics(ps)
+			if v: # implies 1 < n
+				assert 1 < n
+				d['var'] = v
+				stdev = d['stdev'] = math.sqrt(v)
+				d['stderr'] = stdev/math.sqrt(n-1)
 		return d
 	def to_json(self):
 		d = self.get_descriptives()

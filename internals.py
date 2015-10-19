@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 import collections
 import math
-import sqlite3 as sqlite
 
 import descriptives
 
+
 if __debug__:
+	import sqlite3 as sqlite
 	sqlite.enable_callback_tracebacks(True)
 
-#
+
 class SqliteAggregate:
 	"""Classes that implement the Sqlite aggregate function API:
 		__init__(self)
@@ -33,6 +34,7 @@ class Sqlite_mode_freq(DistributionAggregate):
 class Sqlite_descriptives(DistributionAggregate):
 	def finalize(self):
 		return self.to_json()
+
 
 class ListAggregate(SqliteAggregate):
 	"""Classes returning a semicolon-separated list of values
@@ -61,16 +63,17 @@ class Sqlite_last_n(ListAggregate):
 		self.values = collections.deque([], limit)
 	def step(self, value):
 		self.values.append(value)
-#
-def register(con):
+
+
+def register_aggregates(con):
 	con.create_aggregate("DESCRIPTIVES",	1, Sqlite_descriptives)
 	con.create_aggregate("FIRST",			1, Sqlite_first_n)
 	con.create_aggregate("LAST",			1, Sqlite_last_n)
 	con.create_aggregate("MODE",			1, Sqlite_mode)
-#
+
+
 if __name__ == '__main__':
 	from wrapper import SqliteWrapper
-	from pprint import pprint
 	cq = 'create table some_table(i1, f1);'
 	iq = 'insert into some_table(i1, f1) values (?,?);'
 	with SqliteWrapper() as db:

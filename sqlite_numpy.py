@@ -15,13 +15,8 @@ def get_title(name, sep=' '):
 		else:
 			tl.append(w.title())
 	return sep.join(tl) if tl else 'FIELD'
-def get_dtype(table_desc):
-	# table_desc is the output of get_table_info()
-	table_desc.sort(key=lambda row: row.order)
-	names = [ r.name for r in table_desc ]
-	formats = [ lookup_numpy_format(r.type) for r in table_desc ]
-	titles = [ get_title(n) for n in names ]
-	return np.format_parser(names=names, formats=formats, titles=titles)
+
+
 def lookup_numpy_format(sqlite_format, sqlite_width=None):
 	if ')' in sqlite_format:
 		i = sqlite_format.index('(')
@@ -39,4 +34,22 @@ def lookup_numpy_format(sqlite_format, sqlite_width=None):
 		return 'datetime64[ms]'
 	else:
 		raise ValueError("{}({}) not found".format(sqlite_format, sqlite_width))
-#
+
+
+def get_dtype(table_desc, get_title=get_title):
+	"""Example:
+		with SqliteWrapper() as db:
+			desc = db.get_table_info(your_table)				# persists after cursor and database close()
+			dtype = get_dtype(desc)								# ''
+			with db.ccursor() as cur:
+				rows = cur.execute('select * from your_table')	# iterable
+				faster_table = np.from_iter(rows, dtype)		# rows dies with the cursor
+	"""
+	table_desc.sort(key=lambda row: row.order)
+	names = [ r.name for r in table_desc ]
+	formats = [ lookup_numpy_format(r.type) for r in table_desc ]
+	if get_title:
+		titles = [ get_title(n) for n in names ]
+	else:
+		titles = names
+	return np.format_parser(names=names, formats=formats, titles=titles)
