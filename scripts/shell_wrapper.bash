@@ -1,42 +1,35 @@
 #!/bin/bash
+# This script simply wraps an input stream for use with sqlite.
+# example: new_db=$(some_command | this_script)
+# example: new_db=$(this_script some_command_with_args)
+# output is a filename in a temporary directory, with some attempt to keep the content's permissions private
+
+# TODO: I suspect mktemp is slightly different on Linux
+
 set -e
 exec 6<&0 # save stdin
 
-: ${SQLITE=sqlite3}
+umask 077
 export TMPDIR=$(mktemp -t "$$" -d) || exit -1
 
-mode=tab
-operation=fts
-table_name=$(date +'import_%Y%m%d_%H%M')
+: ${DB=$(mktemp -t sqlite)} ${PIPE=$(mktemp -t pipe)}
+: ${SQLITE=sqlite3} ${mode=tab} ${operation=import} ${table_name=$(date +'import_%Y%m%d_%H%M')}
 
 
-if ! [[ $DB ]]
-then
-	DB="$TMPDIR/$$.sqlite"
-fi
-if ! [[ $PIPE ]]
-then
-	PIPE="$TMPDIR/$$.pipe"
-	[[ -e "$PIPE" ]] || mkfifo "$PIPE" || exit -1
-fi
+[[ -e "$PIPE" ]] || mkfifo "$PIPE" || exit -1
 
 
 if [[ $@ ]]
 then
-	cmd="$@"
-elif [[ -t 2 ]]
-then
-	cmd="pv -l"
+	eval "$@" <&6 >"$PIPE" &
 else
-	cmd="cat -"
+	cat - <&6 >"$PIPE" &
 fi
-
-
-eval $cmd <&6 >"$PIPE" &
+exec 0<&6 6<&- # restore stdin
 
 case $operation in
 	fts*)
-		$SQLITE $DB <<- EOL
+		$SQLITE "$DB" <<- EOL
 			.tables
 			CREATE VIRTUAL TABLE "$table_name" USING fts4(tokenize=porter);
 			.mode line
@@ -45,7 +38,7 @@ case $operation in
 		EOL
 		;;
 	import*)
-		$SQLITE $DB <<- EOL
+		$SQLITE "$DB" <<- EOL
 			.tables
 			.mode $mode
 			.import "$PIPE" "$table_name"
@@ -53,7 +46,7 @@ case $operation in
 		EOL
 		;;
 	restore*)
-		$SQLITE $DB <<- EOL
+		$SQLITE "$DB" <<- EOL
 			.tables
 			.restore "$table_name" "$PIPE"
 			.tables
@@ -61,3 +54,6 @@ case $operation in
 		;;
 	*) usage ;;
 esac
+
+[[ -p "$PIPE" ]] && rm "$PIPE"
+echo "$DB"
