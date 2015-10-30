@@ -3,6 +3,8 @@ import collections
 import math
 
 #
+class DescriptivesError(Exception):
+	pass
 #
 class DescriptivesBase:
 	# requires freq={value:count...} with a .items() method, a-la
@@ -68,21 +70,26 @@ class NonParametricBase(DescriptivesBase):
 		_, _, r = self.get_min_max_range()
 		return r
 	def get_min_max_range(self):
-		def preview(iterable):
-			first = next(iterable)
-			return ((first, first), iterable)
+		def preview(iterable): # helper
+			i = iter(iterable)
+			first = next(i)
+			return ((first, first), i)
 		if self.freq:
-			(min, max), values = preview(iter(self.freq.keys()) )
+			(min, max), values = preview(self.freq.keys() )
 			if values:
 				for v in values:
 					if v < min:
 						min = v
 					elif max < v:
 						max = v
-			return min, max, max-min
+			return min, max, max-min or None
 		else:
 			return None, None, None
 	def get_fns(self):
+		"""Five-number summary
+		Returns:
+			(min, 25th, median, 75th, max) of the distribution
+		"""
 		rel_freq = list(self.rel_freq())
 		if rel_freq:
 			points = [0.25, 0.5, 0.75]
@@ -102,11 +109,19 @@ class NonParametricBase(DescriptivesBase):
 		else:
 			return [None]*5
 	def get_percentile(self, p):
+		"""
+		Returns:
+			x at p, (p_lower, p_upper)
+			p_lower and p_upper are not guaranteed to be different
+			An empty distribution will return None
+		"""
+		def panic(*args, **kwargs):
+			raise DistributionError(args)
 		assert 0 <= p <= 1
 		if p == 0:
-			return self.min
-		elif p == 1:
-			return self.max
+			return self.min, (p, p)
+		if p == 1:
+			return self.max, (p, p)
 		rel_freq = self.rel_freq()
 		if rel_freq:
 			cf = 0
@@ -128,7 +143,6 @@ class NonParametricBase(DescriptivesBase):
 		m, _ = self.mode_freq
 		return m
 		
-import json
 class Descriptives(ParametricBase, NonParametricBase):
 	def get_descriptives(self):
 		d = {}
@@ -143,8 +157,3 @@ class Descriptives(ParametricBase, NonParametricBase):
 				stdev = d['stdev'] = math.sqrt(v)
 				d['stderr'] = stdev/math.sqrt(n-1)
 		return d
-	def to_json(self):
-		d = self.get_descriptives()
-		return json.dumps(d)
-	def __str__(self):
-		return self.to_json()
